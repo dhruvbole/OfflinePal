@@ -55,7 +55,7 @@ jobs:
                   classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
               }
           }
-          allprojects { repositories { google(); mavenCentral() } }
+          allprojects { repositories { google(); mavenCentral(); maven { url 'https://jitpack.io' } } }
           ENDOFFILE
 
           cat > gradle.properties << 'ENDOFFILE'
@@ -119,6 +119,7 @@ jobs:
               implementation 'org.tensorflow:tensorflow-lite-task-text:0.4.4'
               implementation 'androidx.recyclerview:recyclerview:1.3.2'
               implementation 'androidx.cardview:cardview:1.0.0'
+              implementation 'com.github.shubham0204:llama.cpp-android:v0.0.3'
           }
           ENDOFFILE
 
@@ -1176,6 +1177,14 @@ jobs:
           echo "=== Verifying project files ==="
           ls -la
           ls -la app/src/main/java/com/offlinepal/
+          echo "=== Downloading SmolLM2 135M model ==="
+          mkdir -p app/src/main/assets/model
+          # SmolLM2 135M Instruct GGUF Q4_K_M ~90MB - real on-device LLM
+          wget -q --show-progress -O app/src/main/assets/model/smollm2.gguf \
+            "https://huggingface.co/HuggingFaceTB/smollm2-135M-instruct-add-basics-GGUF/resolve/main/smollm2-135m-instruct-q4_k_m.gguf" || \
+          curl -L --progress-bar -o app/src/main/assets/model/smollm2.gguf \
+            "https://huggingface.co/HuggingFaceTB/smollm2-135M-instruct-add-basics-GGUF/resolve/main/smollm2-135m-instruct-q4_k_m.gguf"
+          echo "Model size: $(du -sh app/src/main/assets/model/smollm2.gguf)"
           echo "=== Building APK ==="
           ./gradlew assembleDebug --no-daemon --stacktrace
 
