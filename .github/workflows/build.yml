@@ -351,10 +351,16 @@ jobs:
 
       - name: Write launcher icons
         run: |
+          # Adaptive icons go in mipmap-anydpi-v26 (requires API 26+)
+          mkdir -p app/src/main/res/mipmap-anydpi-v26
           ICON='<?xml version="1.0" encoding="utf-8"?><adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@drawable/ic_launcher_background"/><foreground android:drawable="@drawable/ic_launcher_foreground"/></adaptive-icon>'
+          echo "$ICON" > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          echo "$ICON" > app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+          # For older API levels, use a simple PNG-compatible solid color icon via layer-list
+          FALLBACK='<?xml version="1.0" encoding="utf-8"?><layer-list xmlns:android="http://schemas.android.com/apk/res/android"><item android:drawable="@drawable/ic_launcher_background"/><item android:drawable="@drawable/ic_launcher_foreground"/></layer-list>'
           for d in mipmap-hdpi mipmap-mdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
-            echo "$ICON" > app/src/main/res/$d/ic_launcher.xml
-            echo "$ICON" > app/src/main/res/$d/ic_launcher_round.xml
+            echo "$FALLBACK" > app/src/main/res/$d/ic_launcher.xml
+            echo "$FALLBACK" > app/src/main/res/$d/ic_launcher_round.xml
           done
 
       - name: Write flip animators
@@ -630,7 +636,7 @@ jobs:
                   <EditText android:id="@+id/edit_todo_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="textCapSentences" android:imeOptions="actionDone"/>
               </com.google.android.material.textfield.TextInputLayout>
               <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Priority" android:textSize="13sp" android:alpha="0.6" android:layout_marginBottom="8dp"/>
-              <com.google.android.material.chip.ChipGroup android:layout_width="match_parent" android:layout_height="wrap_content" android:singleSelection="true">
+              <com.google.android.material.chip.ChipGroup android:layout_width="match_parent" android:layout_height="wrap_content" xmlns:app="http://schemas.android.com/apk/res-auto" app:singleSelection="true">
                   <com.google.android.material.chip.Chip android:id="@+id/chip_low" style="@style/Widget.Material3.Chip.Filter" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Low"/>
                   <com.google.android.material.chip.Chip android:id="@+id/chip_medium" style="@style/Widget.Material3.Chip.Filter" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Medium" android:checked="true"/>
                   <com.google.android.material.chip.Chip android:id="@+id/chip_high" style="@style/Widget.Material3.Chip.Filter" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="High"/>
