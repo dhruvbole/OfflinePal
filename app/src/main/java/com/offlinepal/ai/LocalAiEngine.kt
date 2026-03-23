@@ -13,7 +13,7 @@ import java.io.File
  */
 class LocalAiEngine(private val context: Context) {
 
-    private var llamaContext: Long = 0L
+    private var llamaInference: Any? = null
     private var isLoaded = false
     private val conversationHistory = mutableListOf<Pair<String, String>>() // user, assistant
 
@@ -50,13 +50,9 @@ class LocalAiEngine(private val context: Context) {
                 Log.i(TAG, "Loading SmolLM2 (${modelFile.length() / 1_000_000}MB) ...")
 
                 // Load llama.cpp model via JNI
-                llamaContext = LlamaJNI.loadModel(
-                    modelPath = modelFile.absolutePath,
-                    nCtx = 512,
-                    nThreads = Runtime.getRuntime().availableProcessors().coerceAtMost(4)
-                )
+                llamaInference = MediaPipeLLM.createInference(context, modelFile.absolutePath)
 
-                if (llamaContext == 0L) {
+                if (llamaInference == null) {
                     withContext(Dispatchers.Main) { onError("llama.cpp returned null context") }
                     return@launch
                 }
@@ -76,14 +72,14 @@ class LocalAiEngine(private val context: Context) {
     }
 
     private fun ensureModel(): File {
-        val dest = File(context.filesDir, "smollm2.gguf")
+        val dest = File(context.filesDir, "smollm2.bin")
         if (dest.exists() && dest.length() > 1_000_000) {
             Log.i(TAG, "Model already in internal storage (${dest.length() / 1_000_000}MB)")
             return dest
         }
         Log.i(TAG, "Copying model from assets ...")
         try {
-            context.assets.open("model/smollm2.gguf").use { input ->
+            context.assets.open("model/smollm2.bin").use { input ->
                 dest.outputStream().use { output ->
                     input.copyTo(output, bufferSize = 1024 * 512)
                 }
@@ -104,7 +100,7 @@ class LocalAiEngine(private val context: Context) {
         // Detect intent regardless of LLM
         val intent = detectIntent(trimmed, lower)
 
-        val responseText = if (isLoaded && llamaContext != 0L) {
+        val responseText = if (isLoaded && llamaInference != null) {
             try {
                 generateWithLLM(trimmed)
             } catch (e: Exception) {
@@ -133,14 +129,7 @@ Keep responses SHORT (1-3 sentences). Be friendly and natural."""
                 "<|im_start|>user\n$userInput<|im_end|>\n" +
                 "<|im_start|>assistant\n"
 
-        val response = LlamaJNI.generate(
-            ctx = llamaContext,
-            prompt = prompt,
-            maxTokens = 256,
-            temperature = 0.7f,
-            topP = 0.9f,
-            stopSequences = arrayOf("<|im_end|>", "<|im_start|>")
-        ).trim()
+        val response = MediaPipeLLM.generate(llamaInference!!, prompt).trim()
 
         // Store in history
         conversationHistory.add(Pair(userInput, response))
@@ -392,9 +381,9 @@ Keep responses SHORT (1-3 sentences). Be friendly and natural."""
     fun clearHistory() = conversationHistory.clear()
 
     fun close() {
-        if (llamaContext != 0L) {
-            try { LlamaJNI.freeModel(llamaContext) } catch (e: Exception) {}
-            llamaContext = 0L
+        if (llamaInference != null) {
+            llamaInference?.let { MediaPipeLLM.close(it) }
+            llamaInference = null
         }
         isLoaded = false
     }
@@ -404,12 +393,43 @@ Keep responses SHORT (1-3 sentences). Be friendly and natural."""
     }
 }
 
-// JNI bridge to llama.cpp
-// These native methods are provided by the llama-android AAR
-private object LlamaJNI {
-    @JvmStatic external fun loadModel(modelPath: String, nCtx: Int, nThreads: Int): Long
-    @JvmStatic external fun generate(ctx: Long, prompt: String, maxTokens: Int, temperature: Float, topP: Float, stopSequences: Array<String>): String
-    @JvmStatic external fun freeModel(ctx: Long)
+
+// MediaPipe LLM Inference bridge
+// Uses MediaPipe Tasks GenAI which supports GGUF models
+private object MediaPipeLLM {
+    fun createInference(context: android.content.Context, modelPath: String): Any? {
+        return try {
+            val cls = Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInference")
+            val optCls = Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInference\$LlmInferenceOptions")
+            val builderCls = Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInference\$LlmInferenceOptions\$Builder")
+            val builder = optCls.getMethod("builder").invoke(null)
+            builderCls.getMethod("setModelPath", String::class.java).invoke(builder, modelPath)
+            builderCls.getMethod("setMaxTokens", Int::class.java).invoke(builder, 512)
+            builderCls.getMethod("setTemperature", Float::class.java).invoke(builder, 0.7f)
+            val options = builderCls.getMethod("build").invoke(builder)
+            cls.getMethod("createFromOptions", android.content.Context::class.java, optCls).invoke(null, context, options)
+        } catch (e: Exception) {
+            android.util.Log.w("MediaPipeLLM", "Failed to init: ${e.message}")
+            null
+        }
+    }
+
+    fun generate(inference: Any, prompt: String): String {
+        return try {
+            val cls = Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInference")
+            cls.getMethod("generateResponse", String::class.java).invoke(inference, prompt) as? String ?: ""
+        } catch (e: Exception) {
+            android.util.Log.e("MediaPipeLLM", "Generate failed: ${e.message}")
+            ""
+        }
+    }
+
+    fun close(inference: Any) {
+        try {
+            val cls = Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInference")
+            cls.getMethod("close").invoke(inference)
+        } catch (e: Exception) {}
+    }
 }
 
 // Math evaluator
