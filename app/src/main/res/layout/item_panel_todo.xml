@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="horizontal" android:gravity="center_vertical"
+    android:paddingStart="8dp" android:paddingEnd="8dp"
+    android:paddingTop="4dp" android:paddingBottom="4dp">
+    <CheckBox android:id="@+id/checkbox_todo" android:layout_width="wrap_content"
+        android:layout_height="wrap_content" android:layout_marginEnd="8dp"/>
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+        android:layout_weight="1" android:orientation="vertical">
+        <TextView android:id="@+id/text_todo_title" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:textSize="14sp"
+            android:maxLines="2" android:ellipsize="end"/>
+        <TextView android:id="@+id/text_priority" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:textSize="11sp"
+            android:alpha="0.5" android:textColor="?attr/colorPrimary"/>
+    </LinearLayout>
+    <ImageButton android:id="@+id/btn_delete_todo" android:layout_width="36dp"
+        android:layout_height="36dp" android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@drawable/ic_delete" android:contentDescription="Delete"/>
+</LinearLayout>
