@@ -58,7 +58,7 @@ class LocalAiEngine(private val context: Context) {
                 }
 
                 isLoaded = true
-                Log.i(TAG, "SmolLM2 loaded OK, context=$llamaContext")
+                Log.i(TAG, "SmolLM2 loaded OK via MediaPipe")
                 withContext(Dispatchers.Main) { onReady() }
 
             } catch (e: UnsatisfiedLinkError) {
@@ -327,7 +327,7 @@ Keep responses SHORT (1-3 sentences). Be friendly and natural."""
         val conv = tryConvert(lower)
         if (conv != null) return conv
 
-        val kb = KnowledgeBase.answer(lower)
+        val kb = KnowledgeBase.findAnswer(lower)
         if (kb != null) return kb
 
         return "I'm not sure about that one. The AI model is initialising — try again shortly, or ask me to set a timer, alarm, or save a note!"
