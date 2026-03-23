@@ -68,8 +68,8 @@ class LocalAiEngine(private val context: Context) {
 
     private fun tryMath(expr: String): String? {
         return try {
-            val clean = expr.replace(" ", "").replace("percent", "/100.0*")
-            val result = evalExpr(clean)
+            val clean = expr.replace(" ", "").replace("x", "*").replace("times", "*")
+            val result = MathEval(clean).evaluate()
             if (result == result.toLong().toDouble()) result.toLong().toString()
             else "%.4f".format(result).trimEnd('0').trimEnd('.')
         } catch (e: Exception) {
@@ -77,72 +77,70 @@ class LocalAiEngine(private val context: Context) {
         }
     }
 
-    private fun evalExpr(e: String): Double {
-        var pos = 0
-
-        fun parseNum(): Double {
-            val start = pos
-            if (pos < e.length && (e[pos] == '-' || e[pos] == '+')) pos++
-            while (pos < e.length && (e[pos].isDigit() || e[pos] == '.')) pos++
-            return e.substring(start, pos).toDouble()
-        }
-
-        fun parseFactor(): Double {
-            return if (pos < e.length && e[pos] == '(') {
-                pos++
-                val r = parseExpr()
-                if (pos < e.length && e[pos] == ')') pos++
-                r
-            } else parseNum()
-        }
-
-        fun parseTerm(): Double {
-            var r = parseFactor()
-            while (pos < e.length && (e[pos] == '*' || e[pos] == '/')) {
-                val op = e[pos++]
-                r = if (op == '*') r * parseFactor() else r / parseFactor()
-            }
-            return r
-        }
-
-        fun parseExpr(): Double {
-            var r = parseTerm()
-            while (pos < e.length && (e[pos] == '+' || e[pos] == '-')) {
-                val op = e[pos++]
-                r = if (op == '+') r + parseTerm() else r - parseTerm()
-            }
-            return r
-        }
-
-        return parseExpr()
-    }
-
     private fun tryConvert(s: String): String? {
-        val patterns = listOf(
-            Pair(Regex("(\\d+\\.?\\d*)\\s*km\\s*to\\s*miles?"), Pair(0.621371, "miles")),
-            Pair(Regex("(\\d+\\.?\\d*)\\s*miles?\\s*to\\s*km"), Pair(1.60934, "km")),
-            Pair(Regex("(\\d+\\.?\\d*)\\s*kg\\s*to\\s*(lbs?|pounds?)"), Pair(2.20462, "lbs")),
-            Pair(Regex("(\\d+\\.?\\d*)\\s*(lbs?|pounds?)\\s*to\\s*kg"), Pair(0.453592, "kg")),
-            Pair(Regex("(\\d+\\.?\\d*)\\s*m\\s*to\\s*(ft|feet)"), Pair(3.28084, "feet")),
-            Pair(Regex("(\\d+\\.?\\d*)\\s*(ft|feet)\\s*to\\s*m"), Pair(0.3048, "m"))
-        )
-        for ((rx, conv) in patterns) {
-            val m = rx.find(s) ?: continue
-            val v = m.groupValues[1].toDoubleOrNull() ?: continue
-            return "%.2f".format(v * conv.first) + " " + conv.second
-        }
-        if (s.contains("celsius") && s.contains("fahrenheit")) {
-            val v = Regex("(\\d+\\.?\\d*)").find(s)?.groupValues?.get(1)?.toDoubleOrNull()
-                ?: return null
-            return "%.1f".format(v * 9.0 / 5.0 + 32) + " F"
-        }
-        if (s.contains("fahrenheit") && s.contains("celsius")) {
-            val v = Regex("(\\d+\\.?\\d*)").find(s)?.groupValues?.get(1)?.toDoubleOrNull()
-                ?: return null
-            return "%.1f".format((v - 32) * 5.0 / 9.0) + " C"
-        }
+        val km = Regex("(\\d+\\.?\\d*)\\s*km\\s*to\\s*miles?").find(s)
+        if (km != null) return "%.2f miles".format(km.groupValues[1].toDouble() * 0.621371)
+
+        val mi = Regex("(\\d+\\.?\\d*)\\s*miles?\\s*to\\s*km").find(s)
+        if (mi != null) return "%.2f km".format(mi.groupValues[1].toDouble() * 1.60934)
+
+        val kg = Regex("(\\d+\\.?\\d*)\\s*kg\\s*to\\s*(lbs?|pounds?)").find(s)
+        if (kg != null) return "%.2f lbs".format(kg.groupValues[1].toDouble() * 2.20462)
+
+        val lb = Regex("(\\d+\\.?\\d*)\\s*(lbs?|pounds?)\\s*to\\s*kg").find(s)
+        if (lb != null) return "%.2f kg".format(lb.groupValues[1].toDouble() * 0.453592)
+
+        val mft = Regex("(\\d+\\.?\\d*)\\s*m\\s*to\\s*(ft|feet)").find(s)
+        if (mft != null) return "%.2f feet".format(mft.groupValues[1].toDouble() * 3.28084)
+
+        val ftm = Regex("(\\d+\\.?\\d*)\\s*(ft|feet)\\s*to\\s*m").find(s)
+        if (ftm != null) return "%.2f m".format(ftm.groupValues[1].toDouble() * 0.3048)
+
+        val num = Regex("(\\d+\\.?\\d*)").find(s)?.groupValues?.get(1)?.toDoubleOrNull()
+        if (num != null && s.contains("celsius") && s.contains("fahrenheit"))
+            return "%.1f F".format(num * 9.0 / 5.0 + 32)
+        if (num != null && s.contains("fahrenheit") && s.contains("celsius"))
+            return "%.1f C".format((num - 32) * 5.0 / 9.0)
+
         return null
     }
 
     fun close() {}
+}
+
+private class MathEval(private val expr: String) {
+    private var pos = 0
+
+    fun evaluate(): Double = parseExpr()
+
+    private fun parseExpr(): Double {
+        var result = parseTerm()
+        while (pos < expr.length && (expr[pos] == '+' || expr[pos] == '-')) {
+            val op = expr[pos++]
+            result = if (op == '+') result + parseTerm() else result - parseTerm()
+        }
+        return result
+    }
+
+    private fun parseTerm(): Double {
+        var result = parseFactor()
+        while (pos < expr.length && (expr[pos] == '*' || expr[pos] == '/')) {
+            val op = expr[pos++]
+            result = if (op == '*') result * parseFactor() else result / parseFactor()
+        }
+        return result
+    }
+
+    private fun parseFactor(): Double {
+        if (pos < expr.length && expr[pos] == '(') {
+            pos++
+            val result = parseExpr()
+            if (pos < expr.length && expr[pos] == ')') pos++
+            return result
+        }
+        val start = pos
+        if (pos < expr.length && (expr[pos] == '-' || expr[pos] == '+')) pos++
+        while (pos < expr.length && (expr[pos].isDigit() || expr[pos] == '.')) pos++
+        return expr.substring(start, pos).toDouble()
+    }
 }
